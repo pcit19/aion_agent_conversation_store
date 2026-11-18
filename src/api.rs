@@ -156,6 +156,24 @@ async fn put_settings(
     Ok(Json(updated))
 }
 
+async fn check_conversation_owner(
+    state: &AppState,
+    caller: &Caller,
+    id: Uuid,
+) -> Result<(), (StatusCode, String)> {
+    if caller.is_operator {
+        return Ok(());
+    }
+    let row = sqlx::query_as::<_, (Uuid, Uuid)>("SELECT workspace_id, user_id FROM ass_conversation_owner($1)")
+        .bind(id)
+        .fetch_optional(state.db.pool())
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
+
+    crate::auth::validate_conversation_owner(caller, row)
+        .map_err(|(sc, msg)| (sc, msg.to_string()))
+}
+
 async fn get_conversation_history(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -164,6 +182,7 @@ async fn get_conversation_history(
 ) -> Result<Json<HistoryResponse>, (StatusCode, String)> {
     let caller = extract_caller(&headers, &state.verifier).await?;
     check_conversation_access(&caller, id).map_err(|(sc, msg)| (sc, msg.to_string()))?;
+    check_conversation_owner(&state, &caller, id).await?;
 
     // Determine max_chars limit (fallback to DB settings)
     let max_chars = match query.max_chars {
@@ -212,6 +231,7 @@ async fn post_turn(
 ) -> Result<(StatusCode, Json<TurnView>), (StatusCode, String)> {
     let caller = extract_caller(&headers, &state.verifier).await?;
     check_conversation_access(&caller, id).map_err(|(sc, msg)| (sc, msg.to_string()))?;
+    check_conversation_owner(&state, &caller, id).await?;
 
     let role = body.role.trim().to_lowercase();
     if role != "user" && role != "assistant" && role != "system" {
@@ -268,6 +288,7 @@ async fn close_conversation(
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let caller = extract_caller(&headers, &state.verifier).await?;
     check_conversation_access(&caller, id).map_err(|(sc, msg)| (sc, msg.to_string()))?;
+    check_conversation_owner(&state, &caller, id).await?;
 
     let mut tx = state
         .db

@@ -244,3 +244,28 @@ pub fn check_conversation_access(caller: &Caller, requested_id: Uuid) -> Result<
         Ok(())
     }
 }
+
+/// Ensures a caller cannot access a conversation owned by another workspace or another user.
+pub fn validate_conversation_owner(
+    caller: &Caller,
+    existing_owner: Option<(Uuid, Uuid)>,
+) -> Result<(), (axum::http::StatusCode, &'static str)> {
+    if caller.is_operator {
+        return Ok(());
+    }
+    if let Some((owner_ws, owner_user)) = existing_owner {
+        if owner_ws != caller.workspace_id {
+            return Err((
+                axum::http::StatusCode::FORBIDDEN,
+                "conversation belongs to another workspace",
+            ));
+        }
+        if owner_user != caller.user_id {
+            return Err((
+                axum::http::StatusCode::FORBIDDEN,
+                "conversation belongs to another user",
+            ));
+        }
+    }
+    Ok(())
+}

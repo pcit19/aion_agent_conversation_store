@@ -127,3 +127,46 @@ async fn test_operator_claims_detection() {
     let caller3 = verifier.verify(&format!("{header}.{payload3}.sig")).await.unwrap();
     assert!(!caller3.is_operator);
 }
+
+#[test]
+fn test_conversation_ownership_cross_workspace_and_cross_user_rejected() {
+    use aion_session_store::auth::validate_conversation_owner;
+
+    let ws1 = Uuid::new_v4();
+    let ws2 = Uuid::new_v4();
+    let user1 = Uuid::new_v4();
+    let user2 = Uuid::new_v4();
+
+    let caller1 = Caller {
+        user_id: user1,
+        workspace_id: ws1,
+        run_id: None,
+        conversation_id: None,
+        is_run_ticket: false,
+        is_operator: false,
+    };
+
+    // 1. Matching owner -> OK
+    assert!(validate_conversation_owner(&caller1, Some((ws1, user1))).is_ok());
+
+    // 2. Cross workspace -> 403 Forbidden
+    let err_ws = validate_conversation_owner(&caller1, Some((ws2, user1))).unwrap_err();
+    assert_eq!(err_ws.0, StatusCode::FORBIDDEN);
+    assert_eq!(err_ws.1, "conversation belongs to another workspace");
+
+    // 3. Same workspace but cross user -> 403 Forbidden
+    let err_user = validate_conversation_owner(&caller1, Some((ws1, user2))).unwrap_err();
+    assert_eq!(err_user.0, StatusCode::FORBIDDEN);
+    assert_eq!(err_user.1, "conversation belongs to another user");
+
+    // 4. Operator bypasses ownership checks
+    let operator_caller = Caller {
+        user_id: user1,
+        workspace_id: ws1,
+        run_id: None,
+        conversation_id: None,
+        is_run_ticket: false,
+        is_operator: true,
+    };
+    assert!(validate_conversation_owner(&operator_caller, Some((ws2, user2))).is_ok());
+}
