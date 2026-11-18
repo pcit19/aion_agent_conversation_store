@@ -1,0 +1,82 @@
+use aion_session_store::auth::{check_conversation_access, Caller, TokenVerifier};
+use axum::http::StatusCode;
+use uuid::Uuid;
+
+#[test]
+fn test_run_ticket_access_matches_conversation() {
+    let conv_id = Uuid::new_v4();
+    let caller = Caller {
+        user_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+        run_id: Some(Uuid::new_v4()),
+        conversation_id: Some(conv_id),
+        is_run_ticket: true,
+    };
+
+    // Matching conversation -> OK
+    assert!(check_conversation_access(&caller, conv_id).is_ok());
+
+    // Mismatched conversation -> 403 Forbidden
+    let other_id = Uuid::new_v4();
+    let err = check_conversation_access(&caller, other_id).unwrap_err();
+    assert_eq!(err.0, StatusCode::FORBIDDEN);
+    assert_eq!(err.1, "ticket does not match this conversation_id");
+}
+
+#[test]
+fn test_run_ticket_missing_conversation_id_rejected() {
+    let caller = Caller {
+        user_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+        run_id: Some(Uuid::new_v4()),
+        conversation_id: None,
+        is_run_ticket: true,
+    };
+
+    let err = check_conversation_access(&caller, Uuid::new_v4()).unwrap_err();
+    assert_eq!(err.0, StatusCode::FORBIDDEN);
+    assert_eq!(err.1, "ticket is missing required conversation_id claim");
+}
+
+#[test]
+fn test_user_ticket_not_restricted_to_single_conversation() {
+    let caller = Caller {
+        user_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+        run_id: None,
+        conversation_id: None,
+        is_run_ticket: false,
+    };
+
+    // Any conversation in workspace is allowed for user ticket
+    assert!(check_conversation_access(&caller, Uuid::new_v4()).is_ok());
+}
+
+#[tokio::test]
+async fn test_permissive_verifier_decodes_claims() {
+    use base64::Engine;
+    let verifier = TokenVerifier::permissive_for_test();
+
+    let user_id = Uuid::new_v4();
+    let workspace_id = Uuid::new_v4();
+    let run_id = Uuid::new_v4();
+    let conv_id = Uuid::new_v4();
+
+    let header = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(r#"{"alg":"none"}"#);
+    let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(serde_json::json!({
+        "sub": user_id.to_string(),
+        "workspace_id": workspace_id.to_string(),
+        "run_id": run_id.to_string(),
+        "conversation_id": conv_id.to_string(),
+        "type": "run"
+    }).to_string());
+
+    let token = format!("{header}.{payload}.sig");
+    let caller = verifier.verify(&token).await.unwrap();
+
+    assert_eq!(caller.user_id, user_id);
+    assert_eq!(caller.workspace_id, workspace_id);
+    assert_eq!(caller.run_id, Some(run_id));
+    assert_eq!(caller.conversation_id, Some(conv_id));
+    assert!(caller.is_run_ticket);
+}
