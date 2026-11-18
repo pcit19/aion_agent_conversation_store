@@ -1,0 +1,40 @@
+# aion_session_store (Rust) — Persistent conversation history & session store
+# Network: main_network (ADR-020)
+services:
+  aion_session_store:
+    image: aion_session_store:current
+    container_name: aion_session_store
+    restart: unless-stopped
+    user: "1000:1000"
+    env_file:
+      - .env.app
+    environment:
+      TZ: "Asia/Ho_Chi_Minh"
+      AION_SESSION_STORE_PORT: "8950"
+      AGENT_CONTROL_JWKS_URL: "http://agent_control_steven:8940/.well-known/jwks.json"
+    networks:
+      - main_network
+    mem_limit: 256m
+    memswap_limit: 256m
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8950/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  main_network:
+    external: true
