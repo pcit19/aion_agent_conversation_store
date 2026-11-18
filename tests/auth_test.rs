@@ -11,6 +11,7 @@ fn test_run_ticket_access_matches_conversation() {
         run_id: Some(Uuid::new_v4()),
         conversation_id: Some(conv_id),
         is_run_ticket: true,
+        is_operator: false,
     };
 
     // Matching conversation -> OK
@@ -31,6 +32,7 @@ fn test_run_ticket_missing_conversation_id_rejected() {
         run_id: Some(Uuid::new_v4()),
         conversation_id: None,
         is_run_ticket: true,
+        is_operator: false,
     };
 
     let err = check_conversation_access(&caller, Uuid::new_v4()).unwrap_err();
@@ -46,6 +48,7 @@ fn test_user_ticket_not_restricted_to_single_conversation() {
         run_id: None,
         conversation_id: None,
         is_run_ticket: false,
+        is_operator: false,
     };
 
     // Any conversation in workspace is allowed for user ticket
@@ -79,4 +82,48 @@ async fn test_permissive_verifier_decodes_claims() {
     assert_eq!(caller.run_id, Some(run_id));
     assert_eq!(caller.conversation_id, Some(conv_id));
     assert!(caller.is_run_ticket);
+    assert!(!caller.is_operator);
+}
+
+#[tokio::test]
+async fn test_operator_claims_detection() {
+    use base64::Engine;
+    let verifier = TokenVerifier::permissive_for_test();
+
+    let user_id = Uuid::new_v4();
+    let workspace_id = Uuid::new_v4();
+
+    let header = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(r#"{"alg":"none"}"#);
+
+    // 1. Regular user token without operator scopes
+    let payload1 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(serde_json::json!({
+        "sub": user_id.to_string(),
+        "workspace_id": workspace_id.to_string(),
+        "type": "user",
+        "scopes": ["read", "write"]
+    }).to_string());
+    let caller1 = verifier.verify(&format!("{header}.{payload1}.sig")).await.unwrap();
+    assert!(!caller1.is_operator);
+
+    // 2. User token with operator scope
+    let payload2 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(serde_json::json!({
+        "sub": user_id.to_string(),
+        "workspace_id": workspace_id.to_string(),
+        "type": "user",
+        "scopes": ["operator"]
+    }).to_string());
+    let caller2 = verifier.verify(&format!("{header}.{payload2}.sig")).await.unwrap();
+    assert!(caller2.is_operator);
+
+    // 3. Run ticket with operator scope is NEVER operator
+    let payload3 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(serde_json::json!({
+        "sub": user_id.to_string(),
+        "workspace_id": workspace_id.to_string(),
+        "run_id": Uuid::new_v4().to_string(),
+        "conversation_id": Uuid::new_v4().to_string(),
+        "type": "run",
+        "scopes": ["operator"]
+    }).to_string());
+    let caller3 = verifier.verify(&format!("{header}.{payload3}.sig")).await.unwrap();
+    assert!(!caller3.is_operator);
 }

@@ -18,6 +18,7 @@ pub struct Caller {
     pub run_id: Option<Uuid>,
     pub conversation_id: Option<Uuid>,
     pub is_run_ticket: bool,
+    pub is_operator: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +32,10 @@ pub struct RunTicketClaims {
     pub run_id: Option<String>,
     pub agent_kind: Option<String>,
     pub conversation_id: Option<String>,
+    #[serde(default)]
+    pub scopes: Vec<String>,
+    #[serde(default)]
+    pub scope: Option<String>,
     pub exp: Option<i64>,
 }
 
@@ -169,12 +174,39 @@ fn claims_to_caller(claims: RunTicketClaims) -> Result<Caller, String> {
 
     let is_run_ticket = claims.ticket_type.as_deref() == Some("run") || run_id.is_some();
 
+    let mut is_operator = false;
+    for s in &claims.scopes {
+        if s == "operator" || s == "admin" || s == "agent_control:operator" || s == "agent_control:write" {
+            is_operator = true;
+        }
+    }
+    if let Some(scope_str) = &claims.scope {
+        for s in scope_str.split_whitespace() {
+            if s == "operator" || s == "admin" || s == "agent_control:operator" || s == "agent_control:write" {
+                is_operator = true;
+            }
+        }
+    }
+    if let Ok(owners_env) = std::env::var("VIVIOS_OWNER_SUBJECTS") {
+        for owner in owners_env.split(',') {
+            if let Ok(owner_uuid) = Uuid::parse_str(owner.trim()) {
+                if owner_uuid == user_id {
+                    is_operator = true;
+                }
+            }
+        }
+    }
+    if is_run_ticket {
+        is_operator = false;
+    }
+
     Ok(Caller {
         user_id,
         workspace_id,
         run_id,
         conversation_id,
         is_run_ticket,
+        is_operator,
     })
 }
 

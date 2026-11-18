@@ -94,7 +94,11 @@ async fn extract_caller(headers: &HeaderMap, verifier: &TokenVerifier) -> Result
         .map_err(|err| (StatusCode::UNAUTHORIZED, format!("invalid token: {err}")))
 }
 
-async fn get_settings(State(state): State<AppState>) -> Result<Json<Settings>, (StatusCode, String)> {
+async fn get_settings(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Settings>, (StatusCode, String)> {
+    extract_caller(&headers, &state.verifier).await?;
     let settings = sqlx::query_as::<_, Settings>(
         "SELECT max_history_characters, idle_timeout_secs, updated_at, updated_by FROM settings WHERE id = 1",
     )
@@ -110,8 +114,14 @@ async fn put_settings(
     headers: HeaderMap,
     Json(body): Json<UpdateSettingsRequest>,
 ) -> Result<Json<Settings>, (StatusCode, String)> {
-    let caller = extract_caller(&headers, &state.verifier).await.ok();
-    let updated_by = caller.map(|c| c.user_id.to_string()).unwrap_or_else(|| "api".to_string());
+    let caller = extract_caller(&headers, &state.verifier).await?;
+    if !caller.is_operator {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "operator authorization required to update settings".to_string(),
+        ));
+    }
+    let updated_by = caller.user_id.to_string();
 
     let mut current = sqlx::query_as::<_, Settings>(
         "SELECT max_history_characters, idle_timeout_secs, updated_at, updated_by FROM settings WHERE id = 1",
@@ -121,13 +131,13 @@ async fn put_settings(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db error: {e}")))?;
 
     if let Some(max_chars) = body.max_history_characters {
-        if max_chars < 100 || max_chars > 2_000_000 {
+        if !(100..=2_000_000).contains(&max_chars) {
             return Err((StatusCode::BAD_REQUEST, "max_history_characters must be between 100 and 2,000,000".into()));
         }
         current.max_history_characters = max_chars;
     }
     if let Some(idle) = body.idle_timeout_secs {
-        if idle < 10 || idle > 86400 * 30 {
+        if !(10..=86400 * 30).contains(&idle) {
             return Err((StatusCode::BAD_REQUEST, "idle_timeout_secs must be between 10 and 2,592,000".into()));
         }
         current.idle_timeout_secs = idle;
