@@ -2,7 +2,7 @@
 """
 Rotates password for Postgres role `aion_session_store_app` in a single atomic process.
 The secret is generated in memory, passed to PostgreSQL via stdin (no CLI args),
-and written directly to .env.app and ~/.config/aion_session_store/app.secret with mode 0600.
+and written directly to .env.app with mode 0600.
 No password is ever echoed to stdout or process argument lists.
 """
 
@@ -15,9 +15,6 @@ import urllib.parse
 def main():
     repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     env_file = os.path.join(repo_dir, ".env.app")
-    secret_dir = os.path.expanduser("~/.config/aion_session_store")
-    os.makedirs(secret_dir, mode=0o700, exist_ok=True)
-    secret_file = os.path.join(secret_dir, "app.secret")
 
     # 1. Generate new cryptographically secure secret
     new_password = secrets.token_hex(24)
@@ -45,13 +42,8 @@ def main():
     with os.fdopen(fd, "w") as f:
         f.write(env_content)
 
-    # 4. Write app.secret with mode 0600
-    fd2 = os.open(secret_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd2, "w") as f:
-        f.write(new_password + "\n")
-
     print(f"[OK] Successfully rotated aion_session_store_app password.")
-    print(f"[OK] Updated {env_file} (mode 0600) and {secret_file} (mode 0600).")
+    print(f"[OK] Updated {env_file} (mode 0600).")
 
 if __name__ == "__main__":
     main()
