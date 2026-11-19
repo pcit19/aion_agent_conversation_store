@@ -8,25 +8,11 @@ use aion_session_store::api::{app_router, AppState};
 use aion_session_store::auth::TokenVerifier;
 use aion_session_store::db::StoreDb;
 
-fn get_db_url() -> Option<String> {
-    if let Ok(url) = std::env::var("TEST_DATABASE_URL") {
-        return Some(url);
+fn get_test_db_url() -> Option<String> {
+    match std::env::var("TEST_DATABASE_URL") {
+        Ok(url) if !url.trim().is_empty() => Some(url),
+        _ => None,
     }
-    if let Ok(url) = std::env::var("AION_SESSION_STORE_DATABASE_URL") {
-        return Some(url);
-    }
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let env_file = std::path::Path::new(manifest_dir).join(".env.app");
-    if let Ok(content) = std::fs::read_to_string(env_file) {
-        for line in content.lines() {
-            if let Some(val) = line.strip_prefix("AION_SESSION_STORE_DATABASE_URL=") {
-                let val = val.trim();
-                let val = val.replace("aion_master_postgres_team:5432", "127.0.0.1:25432");
-                return Some(val);
-            }
-        }
-    }
-    None
 }
 
 fn make_run_token(user_id: Uuid, workspace_id: Uuid, run_id: Uuid, conv_id: Uuid) -> String {
@@ -46,8 +32,8 @@ fn make_run_token(user_id: Uuid, workspace_id: Uuid, run_id: Uuid, conv_id: Uuid
 
 #[tokio::test]
 async fn test_db_real_store_user_a_cannot_access_user_b_conversation() {
-    let Some(db_url) = get_db_url() else {
-        eprintln!("Skipping test: no database url available");
+    let Some(db_url) = get_test_db_url() else {
+        println!("Skipping integration test: TEST_DATABASE_URL is not set (will not run against production database)");
         return;
     };
 
