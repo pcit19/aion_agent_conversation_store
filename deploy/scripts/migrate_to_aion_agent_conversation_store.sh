@@ -169,6 +169,11 @@ GRANT SELECT, UPDATE ON settings TO ${APP_ROLE};
 GRANT SELECT, INSERT, UPDATE, DELETE ON conversations, turns TO ${APP_ROLE};
 GRANT USAGE, SELECT ON SEQUENCE turns_id_seq TO ${APP_ROLE};
 GRANT EXECUTE ON FUNCTION ass_conversation_owner(UUID) TO ${APP_ROLE};
+
+-- Revoke default public connect and restrict to app and backup roles
+REVOKE CONNECT ON DATABASE ${NEW_DB} FROM PUBLIC;
+GRANT CONNECT ON DATABASE ${NEW_DB} TO ${APP_ROLE};
+GRANT CONNECT ON DATABASE ${NEW_DB} TO backup_ro;
 EOF
 
 echo "=== [9/9] Verifying row counts & app role connectivity ==="
