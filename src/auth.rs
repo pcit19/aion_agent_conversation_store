@@ -188,7 +188,7 @@ fn claims_to_caller(claims: RunTicketClaims) -> Result<Caller, String> {
         }
     }
     let owners_env = std::env::var("AION_OWNER_SUBJECTS")
-        .or_else(|_| std::env::var("VIVIOS_OWNER_SUBJECTS"));
+        .or_else(|_| std::env::var("VIVIOS_OWNER_SUBJECTS")); // tên cũ, gỡ khi các service và compose đã chuyển hẳn sang AION_OWNER_SUBJECTS
     if let Ok(owners_env) = owners_env {
         for owner in owners_env.split(',') {
             if let Ok(owner_uuid) = Uuid::parse_str(owner.trim()) {
