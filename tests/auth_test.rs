@@ -1,5 +1,6 @@
-use aion_session_store::auth::{check_conversation_access, Caller, TokenVerifier};
+use aion_agent_conversation_store::auth::{check_conversation_access, Caller, TokenVerifier};
 use axum::http::StatusCode;
+use base64::Engine;
 use uuid::Uuid;
 
 #[test]
@@ -130,7 +131,7 @@ async fn test_operator_claims_detection() {
 
 #[test]
 fn test_conversation_ownership_cross_workspace_and_cross_user_rejected() {
-    use aion_session_store::auth::validate_conversation_owner;
+    use aion_agent_conversation_store::auth::validate_conversation_owner;
 
     let ws1 = Uuid::new_v4();
     let ws2 = Uuid::new_v4();
@@ -169,4 +170,34 @@ fn test_conversation_ownership_cross_workspace_and_cross_user_rejected() {
         is_operator: true,
     };
     assert!(validate_conversation_owner(&operator_caller, Some((ws2, user2))).is_ok());
+}
+
+#[tokio::test]
+async fn test_owner_subjects_dual_read() {
+    let verifier = TokenVerifier::new(None, true);
+    let user_id = Uuid::new_v4();
+    let workspace_id = Uuid::new_v4();
+    let header = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(r#"{"alg":"none"}"#);
+    let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(serde_json::json!({
+        "sub": user_id.to_string(),
+        "workspace_id": workspace_id.to_string(),
+        "type": "user"
+    }).to_string());
+    let token = format!("{header}.{payload}.sig");
+
+    // Case 1: VIVIOS_OWNER_SUBJECTS set
+    std::env::remove_var("AION_OWNER_SUBJECTS");
+    std::env::set_var("VIVIOS_OWNER_SUBJECTS", format!("{},{}", Uuid::new_v4(), user_id));
+    let caller = verifier.verify(&token).await.unwrap();
+    assert!(caller.is_operator);
+
+    // Case 2: AION_OWNER_SUBJECTS set (takes precedence)
+    std::env::set_var("AION_OWNER_SUBJECTS", user_id.to_string());
+    std::env::set_var("VIVIOS_OWNER_SUBJECTS", Uuid::new_v4().to_string());
+    let caller2 = verifier.verify(&token).await.unwrap();
+    assert!(caller2.is_operator);
+
+    // Clean up
+    std::env::remove_var("AION_OWNER_SUBJECTS");
+    std::env::remove_var("VIVIOS_OWNER_SUBJECTS");
 }

@@ -1,5 +1,5 @@
 [package]
-name = "aion_session_store"
+name = "aion_agent_conversation_store"
 edition = "2021"
 version = "0.1.0"
 license = "UNLICENSED"

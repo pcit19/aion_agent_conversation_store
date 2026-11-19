@@ -2,11 +2,11 @@ use std::net::SocketAddr;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use aion_session_store::{app_router, AppState, StoreDb, TokenVerifier};
+use aion_agent_conversation_store::{app_router, AppState, StoreDb, TokenVerifier};
 
 #[derive(Parser)]
-#[command(name = "aion_session_store")]
-#[command(about = "AION Session Store service")]
+#[command(name = "aion_agent_conversation_store")]
+#[command(about = "AION Agent Conversation Store service")]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -14,12 +14,18 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Applies database migrations using AION_SESSION_STORE_MIGRATION_DATABASE_URL (as db owner)
+    /// Applies database migrations using AION_AGENT_CONVERSATION_STORE_MIGRATION_DATABASE_URL (or AION_SESSION_STORE_MIGRATION_DATABASE_URL)
     Migrate,
 }
 
-fn env_or(name: &str, default: &str) -> String {
-    std::env::var(name).unwrap_or_else(|_| default.to_string())
+fn get_env_dual(primary: &str, secondary: &str) -> Option<String> {
+    match std::env::var(primary) {
+        Ok(val) if !val.trim().is_empty() => Some(val),
+        _ => match std::env::var(secondary) {
+            Ok(val) if !val.trim().is_empty() => Some(val),
+            _ => None,
+        },
+    }
 }
 
 #[tokio::main]
@@ -28,15 +34,18 @@ async fn main() -> ExitCode {
     let cli = Cli::parse();
 
     if let Some(Commands::Migrate) = cli.command {
-        let migration_url = match std::env::var("AION_SESSION_STORE_MIGRATION_DATABASE_URL") {
-            Ok(url) if !url.trim().is_empty() => url,
-            _ => {
-                eprintln!("AION_SESSION_STORE_MIGRATION_DATABASE_URL is required for migrations");
+        let migration_url = match get_env_dual(
+            "AION_AGENT_CONVERSATION_STORE_MIGRATION_DATABASE_URL",
+            "AION_SESSION_STORE_MIGRATION_DATABASE_URL",
+        ) {
+            Some(url) => url,
+            None => {
+                eprintln!("AION_AGENT_CONVERSATION_STORE_MIGRATION_DATABASE_URL (or AION_SESSION_STORE_MIGRATION_DATABASE_URL) is required for migrations");
                 return ExitCode::FAILURE;
             }
         };
         tracing::info!("running database migrations...");
-        if let Err(err) = aion_session_store::db::migrate(&migration_url).await {
+        if let Err(err) = aion_agent_conversation_store::db::migrate(&migration_url).await {
             eprintln!("migration failed: {err}");
             return ExitCode::FAILURE;
         }
@@ -44,18 +53,24 @@ async fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let database_url = match std::env::var("AION_SESSION_STORE_DATABASE_URL") {
-        Ok(url) if !url.trim().is_empty() => url,
-        _ => {
-            eprintln!("AION_SESSION_STORE_DATABASE_URL is required to run server");
+    let database_url = match get_env_dual(
+        "AION_AGENT_CONVERSATION_STORE_DATABASE_URL",
+        "AION_SESSION_STORE_DATABASE_URL",
+    ) {
+        Some(url) => url,
+        None => {
+            eprintln!("AION_AGENT_CONVERSATION_STORE_DATABASE_URL (or AION_SESSION_STORE_DATABASE_URL) is required to run server");
             return ExitCode::FAILURE;
         }
     };
 
     let jwks_url = std::env::var("AGENT_CONTROL_JWKS_URL").ok();
-    let permissive_auth = std::env::var("AION_SESSION_STORE_PERMISSIVE_AUTH")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
+    let permissive_auth = get_env_dual(
+        "AION_AGENT_CONVERSATION_STORE_PERMISSIVE_AUTH",
+        "AION_SESSION_STORE_PERMISSIVE_AUTH",
+    )
+    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+    .unwrap_or(false);
 
     let db = match StoreDb::connect_lazy(&database_url, 16) {
         Ok(db) => db,
@@ -69,11 +84,13 @@ async fn main() -> ExitCode {
     let state = AppState { db, verifier };
     let app = app_router(state);
 
-    let port: u16 = env_or("PORT", &env_or("AION_SESSION_STORE_PORT", "8980"))
+    let port: u16 = get_env_dual("AION_AGENT_CONVERSATION_STORE_PORT", "AION_SESSION_STORE_PORT")
+        .or_else(|| std::env::var("PORT").ok())
+        .unwrap_or_else(|| "8950".to_string())
         .parse()
-        .unwrap_or(8980);
+        .unwrap_or(8950);
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    tracing::info!("aion_session_store listening on {}", addr);
+    tracing::info!("aion_agent_conversation_store listening on {}", addr);
 
     let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(l) => l,

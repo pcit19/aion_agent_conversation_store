@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "aion_session_store"
+name = "aion_agent_conversation_store"
 version = "0.1.0"
 dependencies = [
  "axum",

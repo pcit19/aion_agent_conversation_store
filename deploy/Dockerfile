@@ -6,7 +6,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY target/release/aion_session_store /app/aion_session_store
+COPY target/release/aion_agent_conversation_store /app/aion_agent_conversation_store
 
 # Run as non-root user 1000:1000
 USER 1000:1000
@@ -14,4 +14,4 @@ USER 1000:1000
 ENV PORT=8950
 EXPOSE 8950
 
-ENTRYPOINT ["/app/aion_session_store"]
+ENTRYPOINT ["/app/aion_agent_conversation_store"]

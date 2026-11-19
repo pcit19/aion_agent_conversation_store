@@ -13,7 +13,7 @@ pub struct StoreDb {
 
 impl StoreDb {
     pub fn connect_lazy(database_url: &str, max_connections: u32) -> Result<Self, sqlx::Error> {
-        let options = PgConnectOptions::from_str(database_url)?.application_name("aion_session_store");
+        let options = PgConnectOptions::from_str(database_url)?.application_name("aion_agent_conversation_store");
         let pool = PgPoolOptions::new().max_connections(max_connections).connect_lazy_with(options);
         Ok(Self { pool })
     }

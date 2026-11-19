@@ -4,6 +4,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 commit=$(git rev-parse --short HEAD)
-/opt/projects/tools/bin/run-limited --mem 3G -- cargo build --release --bin aion_session_store
-docker build -f deploy/Dockerfile -t "aion_session_store:${commit}" -t aion_session_store:current .
-echo "built aion_session_store:${commit}"
+/opt/projects/tools/bin/run-limited --mem 3G -- cargo build --release --bin aion_agent_conversation_store
+docker build -f deploy/Dockerfile -t "aion_agent_conversation_store:${commit}" -t aion_agent_conversation_store:current .
+echo "built aion_agent_conversation_store:${commit}"

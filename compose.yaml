@@ -1,16 +1,18 @@
-# aion_session_store (Rust) — Persistent conversation history & session store
+# aion_agent_conversation_store (Rust) — Persistent conversation history & session store
 # Network: main_network (ADR-020)
 services:
-  aion_session_store:
-    image: aion_session_store:current
-    container_name: aion_session_store
+  aion_agent_conversation_store:
+    image: aion_agent_conversation_store:current
+    container_name: aion_agent_conversation_store
     restart: unless-stopped
     user: "1000:1000"
     env_file:
       - .env.app
     environment:
       TZ: "Asia/Ho_Chi_Minh"
+      AION_AGENT_CONVERSATION_STORE_PORT: "8950"
       AION_SESSION_STORE_PORT: "8950"
+      AION_OWNER_SUBJECTS: ${AION_OWNER_SUBJECTS:-${VIVIOS_OWNER_SUBJECTS:-}}
       AGENT_CONTROL_JWKS_URL: "http://agent_control_steven:8940/.well-known/jwks.json"
     networks:
       - main_network

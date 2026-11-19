@@ -4,9 +4,9 @@ use base64::Engine;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use aion_session_store::api::{app_router, AppState};
-use aion_session_store::auth::TokenVerifier;
-use aion_session_store::db::StoreDb;
+use aion_agent_conversation_store::api::{app_router, AppState};
+use aion_agent_conversation_store::auth::TokenVerifier;
+use aion_agent_conversation_store::db::StoreDb;
 
 fn get_test_db_url() -> Option<String> {
     match std::env::var("TEST_DATABASE_URL") {
