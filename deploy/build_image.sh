@@ -4,6 +4,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 commit=$(git rev-parse --short HEAD)
-/opt/projects/tools/bin/run-limited --mem 3G -- cargo build --release --bin aion_agent_conversation_store
+build_runner="/opt/projects/tools/bin/run-limited"
+if [[ -x /opt/projects/tools/bin/build-offload ]]; then
+  build_runner="/opt/projects/tools/bin/build-offload"
+fi
+"$build_runner" --mem 3G -- cargo build --release --bin aion_agent_conversation_store
 docker build -f deploy/Dockerfile -t "aion_agent_conversation_store:${commit}" -t aion_agent_conversation_store:current .
 echo "built aion_agent_conversation_store:${commit}"
