@@ -3,3 +3,4 @@
 .env.*
 !.env.app.example
 !.env.owner.example
+/secrets/
